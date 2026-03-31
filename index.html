@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Firebase Новые Функции</title>
+    <style>
+        /* Базовые стили для красоты */
+        body { font-family: sans-serif; background: #eef2f5; display: flex; flex-direction: column; align-items: center; padding: 30px; }
+        .creator { width: 350px; background: white; padding: 20px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); margin-bottom: 20px; }
+        input, textarea { width: 100%; padding: 10px; margin-bottom: 10px; border: 1px solid #ddd; border-radius: 5px; box-sizing: border-box;}
+        button#addBtn { background: #28a745; color: white; border: none; padding: 10px 15px; border-radius: 5px; cursor: pointer; width: 100%;}
+        
+        /* Стили для заметок */
+        #board { width: 390px; }
+        .note { background: white; border: 1px solid #eaeaea; padding: 15px; margin-bottom: 15px; border-radius: 8px; position: relative; }
+        .note.urgent { border: 2px solid red; background: #fff1f1; } /* Стиль для СРОЧНЫХ */
+        .note-text { margin-bottom: 10px; font-size: 1.1em; }
+        .actions { display: flex; gap: 10px; justify-content: flex-end; }
+        .btn-delete { background: #dc3545; color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer; font-size: 0.8em;}
+        .btn-status { background: #ffc107; color: #212529; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer; font-size: 0.8em;}
+    </style>
+</head>
+<body>
+
+    <div class="creator">
+        <h3>Добавить заметку</h3>
+        <textarea id="noteText" placeholder="Текст заметки..." rows="3"></textarea>
+        <button id="addBtn">Добавить</button>
+    </div>
+
+    <div id="board"></div>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.0/firebase-app.js";
+        import { 
+            getFirestore, collection, addDoc, query, onSnapshot, orderBy, 
+            doc, deleteDoc, updateDoc // <-- ИМПОРТ НОВЫХ ФУНКЦИЙ
+        } from "https://www.gstatic.com/firebasejs/10.7.0/firebase-firestore.js";
+
+        // !!! ЗАМЕНИТЕ НА СВОИ НАСТРОЙКИ КРИФГ !!!
+        const firebaseConfig = {
+        apiKey: "AIzaSyBD8ksqaZhKvx5X5yg7uNbuCmwkM9i1vug",
+        authDomain: "registerasddwqwqrf.firebaseapp.com",
+        projectId: "registerasddwqwqrf",
+        storageBucket: "registerasddwqwqrf.firebasestorage.app",
+        messagingSenderId: "96075486903",
+        appId: "1:96075486903:web:e15506574d299351f19f32",
+        measurementId: "G-L1ESE7TD5D"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+
+        // --- БАЗОВАЯ ФУНКЦИЯ: ЗАПИСЬ (просто чтобы данные были) ---
+        document.getElementById('addBtn').onclick = async () => {
+            const text = document.getElementById('noteText').value;
+            if (!text) return;
+            try {
+                await addDoc(collection(db, "notes"), {
+                    text: text,
+                    status: 'normal', // Изначально статус 'normal'
+                    time: new Date()
+                });
+                document.getElementById('noteText').value = "";
+            } catch (e) { console.error(e); }
+        };
+
+        // --- БАЗОВАЯ ФУНКЦИЯ: REAL-TIME ЧТЕНИЕ (чтобы видеть изменения) ---
+        const q = query(collection(db, "notes"), orderBy("time", "desc"));
+        onSnapshot(q, (snapshot) => {
+            const board = document.getElementById('board');
+            board.innerHTML = "";
+            snapshot.forEach((docRef) => {
+                const data = docRef.data();
+                const id = docRef.id;
+                
+                // Добавляем класс 'urgent', если статус заметки - urgent
+                board.innerHTML += `
+                    <div class="note ${data.status === 'urgent' ? 'urgent' : ''}">
+                        <p class="note-text">${data.text}</p>
+                        <div class="actions">
+                            <button class="btn-status" onclick="toggleUrgent('${id}', '${data.status}')">
+                                ${data.status === 'urgent' ? 'Норм' : 'Срочно!'}
+                            </button>
+                            <button class="btn-delete" onclick="deleteNote('${id}')">Удалить</button>
+                        </div>
+                    </div>
+                `;
+            });
+        });
+
+        // ========================================================
+        // !!! НОВЫЕ ОБЯЗАТЕЛЬНЫЕ ФУНКЦИИ (Работают с базой) !!!
+        // ========================================================
+
+        /**
+         * НОВАЯ ФУНКЦИЯ 1: Полное удаление документа
+         * Использует метод Firebase: deleteDoc()
+         */
+        window.deleteNote = async (id) => {
+            const noteRef = doc(db, "notes", id); // 1. Получаем ссылку на конкретный документ по ID
+            try {
+                // 2. Вызываем метод удаления
+                await deleteDoc(noteRef);
+                console.log("Заметка удалена в облаке!");
+            } catch (e) {
+                console.error("Ошибка удаления заметки:", e.message);
+            }
+        };
+
+        /**
+         * НОВАЯ ФУНКЦИЯ 2: Переключение логического статуса (Срочно/Нормально)
+         * Использует метод Firebase: updateDoc() для точечного изменения поля.
+         */
+        window.toggleUrgent = async (id, currentStatus) => {
+            const noteRef = doc(db, "notes", id); // 1. Получаем ссылку
+            
+            // 2. Определяем новый статус на основе текущего (логика клиента)
+            const newStatus = currentStatus === 'urgent' ? 'normal' : 'urgent';
+
+            try {
+                // 3. Вызываем метод обновления точечного поля 'status'
+                await updateDoc(noteRef, {
+                    status: newStatus
+                });
+                console.log("Статус заметки изменен в облаке!");
+            } catch (e) {
+                console.error("Ошибка изменения статуса:", e.message);
+            }
+        };
+
+    </script>
+</body>
+</html>
